@@ -1,0 +1,47 @@
+# Minimal DeepSeek-first example.
+# For a reusable repo, start with .github/workflows/pr_agent.yml instead.
+name: AI PR Reviewer
+
+on:
+  pull_request:
+    types: [opened, reopened, ready_for_review, synchronize]
+  issue_comment:
+    types: [created]
+
+jobs:
+  pr_agent:
+    if: ${{ vars.AI_PR_REVIEW_ENABLED != 'false' && github.event.sender.type != 'Bot' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: write
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # Optional:
+      #   AI_PR_REVIEW_ENABLED=false pauses this workflow.
+      #   AI_PR_REVIEW_MODE=light|balanced|deep is implemented in the full template.
+      DEEPSEEK.KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+      config.fallback_models: '["deepseek/deepseek-v4-flash"]'
+
+    steps:
+      - name: Automatic cheap review
+        if: ${{ github.event_name == 'pull_request' && github.event.pull_request.draft == false }}
+        # Pinned for stability. Update intentionally after testing.
+        uses: Codium-ai/pr-agent@0e37fc84fcc8207561e64eef8f7f634fb57e8447
+        env:
+          config.model: "deepseek/deepseek-v4-flash"
+          github_action_config.auto_describe: "true"
+          github_action_config.auto_review: "false"
+          github_action_config.auto_improve: "true"
+
+      - name: Manual stronger review
+        if: ${{ github.event_name == 'issue_comment' && github.event.issue.pull_request }}
+        # Pinned for stability. Update intentionally after testing.
+        uses: Codium-ai/pr-agent@0e37fc84fcc8207561e64eef8f7f634fb57e8447
+        env:
+          config.model: "deepseek/deepseek-v4-pro"
+          config.fallback_models: '["deepseek/deepseek-v4-pro"]'
+          github_action_config.auto_describe: "false"
+          github_action_config.auto_review: "false"
+          github_action_config.auto_improve: "false"

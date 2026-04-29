@@ -1,0 +1,101 @@
+# Recommended full workflow example.
+# This mirrors .github/workflows/pr_agent.yml and adds orientation comments.
+# Copy this only if you want an example file to adapt. For normal setup, use
+# .github/workflows/pr_agent.yml as the source of truth.
+
+name: AI PR Reviewer
+
+on:
+  pull_request:
+    types: [opened, reopened, ready_for_review, synchronize]
+  issue_comment:
+    types: [created]
+
+jobs:
+  pr_agent:
+    name: PR-Agent review
+    if: >-
+      ${{
+        vars.AI_PR_REVIEW_ENABLED != 'false' &&
+        github.event.sender.type != 'Bot' &&
+        (
+          (github.event_name == 'pull_request' && github.event.pull_request.draft == false) ||
+          (github.event_name == 'issue_comment' && github.event.issue.pull_request)
+        )
+      }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: write
+
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # Optional repository variables:
+      #   AI_PR_REVIEW_ENABLED=false pauses automatic and manual review.
+      #   AI_PR_REVIEW_MODE=light|balanced|deep tunes review intensity.
+      # Defaults when unset: enabled, balanced.
+
+      # Default provider: DeepSeek through LiteLLM.
+      # Replace this mapping when you switch providers.
+      DEEPSEEK.KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+
+      config.ai_timeout: "300"
+      config.large_patch_policy: "clip"
+      config.duplicate_prompt_examples: "true"
+      config.custom_model_max_tokens: "256000"
+      config.max_model_tokens: "128000"
+      config.fallback_models: '["deepseek/deepseek-v4-flash"]'
+      pr_code_suggestions.num_code_suggestions_per_chunk: ${{ vars.AI_PR_REVIEW_MODE == 'light' && '2' || vars.AI_PR_REVIEW_MODE == 'deep' && '6' || '4' }}
+      pr_code_suggestions.suggestions_score_threshold: ${{ vars.AI_PR_REVIEW_MODE == 'light' && '3' || vars.AI_PR_REVIEW_MODE == 'deep' && '0' || '1' }}
+
+    steps:
+      - name: Pull request overview
+        if: >-
+          ${{
+            github.event_name == 'pull_request' &&
+            contains(fromJSON('["opened", "reopened", "ready_for_review"]'), github.event.action)
+          }}
+        # Pinned for stability. Update intentionally after testing.
+        uses: Codium-ai/pr-agent@0e37fc84fcc8207561e64eef8f7f634fb57e8447
+        env:
+          # Light lane: cheap automatic summary.
+          config.model: "deepseek/deepseek-v4-flash"
+          config.reasoning_effort: ${{ vars.AI_PR_REVIEW_MODE == 'light' && 'medium' || 'max' }}
+          github_action_config.auto_describe: "true"
+          github_action_config.auto_review: "false"
+          github_action_config.auto_improve: "false"
+          github_action_config.pr_actions: '["opened", "reopened", "ready_for_review"]'
+
+      - name: Automatic code suggestions
+        if: >-
+          ${{
+            github.event_name == 'pull_request' &&
+            vars.AI_PR_REVIEW_MODE != 'deep'
+          }}
+        # Pinned for stability. Update intentionally after testing.
+        uses: Codium-ai/pr-agent@0e37fc84fcc8207561e64eef8f7f634fb57e8447
+        env:
+          # Light lane: cheap automatic suggestions on PR updates.
+          config.model: "deepseek/deepseek-v4-flash"
+          config.reasoning_effort: ${{ vars.AI_PR_REVIEW_MODE == 'light' && 'medium' || 'max' }}
+          github_action_config.auto_describe: "false"
+          github_action_config.auto_review: "false"
+          github_action_config.auto_improve: "true"
+          github_action_config.pr_actions: '["opened", "reopened", "ready_for_review", "synchronize"]'
+
+      - name: Manual slash commands
+        if: ${{ github.event_name == 'issue_comment' && github.event.issue.pull_request }}
+        # Pinned for stability. Update intentionally after testing.
+        uses: Codium-ai/pr-agent@0e37fc84fcc8207561e64eef8f7f634fb57e8447
+        env:
+          # Deep lane: stronger model when a person asks for it.
+          config.model: ${{ vars.AI_PR_REVIEW_MODE == 'light' && 'deepseek/deepseek-v4-flash' || 'deepseek/deepseek-v4-pro' }}
+          config.fallback_models: ${{ vars.AI_PR_REVIEW_MODE == 'light' && '["deepseek/deepseek-v4-flash"]' || '["deepseek/deepseek-v4-pro"]' }}
+          config.reasoning_effort: ${{ vars.AI_PR_REVIEW_MODE == 'light' && 'medium' || 'high' }}
+          github_action_config.auto_describe: "false"
+          github_action_config.auto_review: "false"
+          github_action_config.auto_improve: "false"

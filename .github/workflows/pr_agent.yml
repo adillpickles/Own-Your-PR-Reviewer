@@ -1,0 +1,129 @@
+name: AI PR Reviewer
+
+on:
+  pull_request:
+    types: [opened, reopened, ready_for_review, synchronize]
+  issue_comment:
+    types: [created]
+
+jobs:
+  pr_agent:
+    name: PR-Agent review
+    if: >-
+      ${{
+        vars.AI_PR_REVIEW_ENABLED != 'false' &&
+        github.event.sender.type != 'Bot' &&
+        (
+          (github.event_name == 'pull_request' && github.event.pull_request.draft == false) ||
+          (github.event_name == 'issue_comment' && github.event.issue.pull_request)
+        )
+      }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: write
+
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # Optional repository variables:
+      #   AI_PR_REVIEW_ENABLED=false pauses the whole workflow.
+      #   AI_PR_REVIEW_MODE=light|balanced|deep tunes cost and review intensity.
+      #
+      # Defaults when variables are not set:
+      #   enabled = true
+      #   mode = balanced
+      #
+      # Deep mode keeps automatic PR overview on, skips automatic code suggestions,
+      # and saves the stronger model for manual slash commands.
+
+      # Default provider: DeepSeek through LiteLLM.
+      # Add this repository secret in GitHub:
+      #   DEEPSEEK_API_KEY = your provider API key
+      #
+      # PR-Agent maps DEEPSEEK.KEY to LiteLLM's DeepSeek API key env var.
+      # To use another provider, replace this with the env var or secret mapping
+      # required by PR-Agent and LiteLLM for that provider.
+      DEEPSEEK.KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+
+      # General PR-Agent settings.
+      # These are intentionally conservative for template use.
+      config.ai_timeout: "300"
+      config.large_patch_policy: "clip"
+      config.duplicate_prompt_examples: "true"
+      config.custom_model_max_tokens: "256000"
+      config.max_model_tokens: "128000"
+
+      # Review intensity knobs.
+      # Light: fewer suggestions and stricter filtering.
+      # Balanced: default cost-aware behavior.
+      # Deep: richer manual suggestions, with automatic suggestions skipped below.
+      pr_code_suggestions.num_code_suggestions_per_chunk: ${{ vars.AI_PR_REVIEW_MODE == 'light' && '2' || vars.AI_PR_REVIEW_MODE == 'deep' && '6' || '4' }}
+      pr_code_suggestions.suggestions_score_threshold: ${{ vars.AI_PR_REVIEW_MODE == 'light' && '3' || vars.AI_PR_REVIEW_MODE == 'deep' && '0' || '1' }}
+
+      # If the selected model fails, PR-Agent can try these backup models.
+      # Keep this aligned with your chosen provider.
+      config.fallback_models: '["deepseek/deepseek-v4-flash"]'
+
+    steps:
+      - name: Pull request overview
+        if: >-
+          ${{
+            github.event_name == 'pull_request' &&
+            contains(fromJSON('["opened", "reopened", "ready_for_review"]'), github.event.action)
+          }}
+        # Pinned to a specific PR-Agent commit for stability.
+        # Update intentionally after testing a newer PR-Agent version.
+        uses: Codium-ai/pr-agent@0e37fc84fcc8207561e64eef8f7f634fb57e8447
+        env:
+          # Cheap automatic model for a lightweight PR summary.
+          # Swap this for any LiteLLM-supported model, for example:
+          #   openai/<model>
+          #   anthropic/<model>
+          #   gemini/<model>
+          #   moonshot/<model>
+          config.model: "deepseek/deepseek-v4-flash"
+          config.reasoning_effort: ${{ vars.AI_PR_REVIEW_MODE == 'light' && 'medium' || 'max' }}
+          github_action_config.auto_describe: "true"
+          github_action_config.auto_review: "false"
+          github_action_config.auto_improve: "false"
+          github_action_config.pr_actions: '["opened", "reopened", "ready_for_review"]'
+
+      - name: Automatic code suggestions
+        if: >-
+          ${{
+            github.event_name == 'pull_request' &&
+            vars.AI_PR_REVIEW_MODE != 'deep'
+          }}
+        # Pinned to a specific PR-Agent commit for stability.
+        uses: Codium-ai/pr-agent@0e37fc84fcc8207561e64eef8f7f634fb57e8447
+        env:
+          # Cheap automatic model for routine PR updates.
+          # This is meant to catch obvious bugs, edge cases, and test gaps.
+          config.model: "deepseek/deepseek-v4-flash"
+          config.reasoning_effort: ${{ vars.AI_PR_REVIEW_MODE == 'light' && 'medium' || 'max' }}
+          github_action_config.auto_describe: "false"
+          github_action_config.auto_review: "false"
+          github_action_config.auto_improve: "true"
+          github_action_config.pr_actions: '["opened", "reopened", "ready_for_review", "synchronize"]'
+
+      - name: Manual slash commands
+        if: ${{ github.event_name == 'issue_comment' && github.event.issue.pull_request }}
+        # Pinned to a specific PR-Agent commit for stability.
+        uses: Codium-ai/pr-agent@0e37fc84fcc8207561e64eef8f7f634fb57e8447
+        env:
+          # Manual reviews can use a stronger model because a person chooses when
+          # the extra spend is worth it. Comment on the PR with commands like:
+          #   /describe
+          #   /review
+          #   /improve
+          #   /ask What edge cases should I test?
+          config.model: ${{ vars.AI_PR_REVIEW_MODE == 'light' && 'deepseek/deepseek-v4-flash' || 'deepseek/deepseek-v4-pro' }}
+          config.fallback_models: ${{ vars.AI_PR_REVIEW_MODE == 'light' && '["deepseek/deepseek-v4-flash"]' || '["deepseek/deepseek-v4-pro"]' }}
+          config.reasoning_effort: ${{ vars.AI_PR_REVIEW_MODE == 'light' && 'medium' || 'high' }}
+          github_action_config.auto_describe: "false"
+          github_action_config.auto_review: "false"
+          github_action_config.auto_improve: "false"
