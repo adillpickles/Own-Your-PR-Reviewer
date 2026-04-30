@@ -1,5 +1,6 @@
 # Provider-flexible reference example.
 # This file shows the shape to edit, not a provider-complete workflow.
+# It is not ready to run until you replace placeholders with real provider values.
 name: AI PR Reviewer
 
 on:
@@ -10,7 +11,19 @@ on:
 
 jobs:
   pr_agent:
-    if: ${{ vars.AI_PR_REVIEW_ENABLED != 'false' && github.event.sender.type != 'Bot' }}
+    if: >-
+      ${{
+        vars.AI_PR_REVIEW_ENABLED != 'false' &&
+        github.event.sender.type != 'Bot' &&
+        (
+          github.event_name == 'pull_request' ||
+          (
+            github.event_name == 'issue_comment' &&
+            github.event.issue.pull_request &&
+            startsWith(github.event.comment.body, '/')
+          )
+        )
+      }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -22,6 +35,7 @@ jobs:
       # Optional:
       #   AI_PR_REVIEW_ENABLED=false pauses this workflow.
       #   AI_PR_REVIEW_MODE=light|balanced|deep can be wired like the full template.
+      # Slash-command comments must start with / to run the manual step.
 
       # Replace the next line with the provider-specific key mapping required
       # by PR-Agent and LiteLLM. Do not assume every provider uses the same
@@ -46,7 +60,7 @@ jobs:
           github_action_config.auto_improve: "true"
 
       - name: Manual stronger review
-        if: ${{ github.event_name == 'issue_comment' && github.event.issue.pull_request }}
+        if: ${{ github.event_name == 'issue_comment' && github.event.issue.pull_request && startsWith(github.event.comment.body, '/') }}
         # Pinned for stability. Update intentionally after testing.
         uses: Codium-ai/pr-agent@0e37fc84fcc8207561e64eef8f7f634fb57e8447
         env:

@@ -87,6 +87,10 @@ The workflow runs on:
 
 Draft PRs are skipped by default to avoid spending credits too early.
 
+That draft skip applies to automatic `pull_request` runs. Manual slash commands are triggered by
+`issue_comment` events, and this template keeps that path simple by running when a PR comment starts
+with `/`. Do not use slash commands on draft PRs unless you intentionally want the manual pass.
+
 ## 5. Let The Automatic Review Run
 
 On a new PR, the recommended workflow runs:
@@ -100,7 +104,7 @@ In deep mode, automatic suggestions are skipped. The overview still runs so the 
 
 ## 6. Use Slash Commands Manually
 
-Comment on the PR with one command on the first line:
+Comment on the PR with one command on the first line. The comment must start with `/`:
 
 ```text
 /describe

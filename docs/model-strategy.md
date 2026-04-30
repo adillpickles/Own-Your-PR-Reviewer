@@ -26,9 +26,9 @@ This is implemented directly in GitHub Actions expressions. It is intentionally 
 
 | Lane | How it runs | Good for | Cost profile |
 | --- | --- | --- | --- |
-| Light | Automatic overview and suggestions | Small PRs, normal iteration, quick feedback | Lowest |
-| Balanced | Stronger model or stricter instructions | Medium PRs, changes with real logic, review before asking humans | Medium |
-| Deep | Manual slash-command review | Auth, security, migrations, large refactors, important releases | Highest |
+| Light | Cheap automatic overview and suggestions | Small PRs, frequent updates, quick feedback | Lowest |
+| Balanced | Cheap automatic pass plus stronger manual commands | Most projects, normal feature work, review before asking humans | Mixed |
+| Deep | Automatic overview plus strong manual slash-command review | Auth, security, migrations, large refactors, important releases | Highest when used |
 
 ## What The Mode Changes
 
@@ -42,12 +42,14 @@ Deep mode is manual-heavy on purpose. It does not turn every PR update into an e
 
 ## Light Mode
 
-Light mode is the default automatic lane.
+Light mode is not meant to be a bad review. It is the cost-controlled lane: fewer wasted tokens,
+fewer low-value comments, and stricter suggestion filtering while still looking for real issues.
 
 Use it for:
 
 - PR summaries.
-- Obvious bug checks.
+- Frequent automatic checks.
+- Obvious bug and edge-case checks.
 - Small code suggestions.
 - Test gap reminders.
 - Fast feedback while you are still iterating.
@@ -71,7 +73,8 @@ Typical settings:
 
 ## Balanced Mode
 
-Balanced mode is for PRs that deserve more than a cheap pass but do not need the most expensive model every time.
+Balanced mode is the recommended default. It keeps automatic review inexpensive, then lets manual
+slash commands use a stronger model when a person decides the PR needs another pass.
 
 Use it for:
 
@@ -79,14 +82,14 @@ Use it for:
 - Data-flow changes.
 - Important bug fixes.
 - Refactors that touch shared code.
-- PRs where the light pass was too shallow.
+- PRs where you want cheap routine feedback plus a better manual review option.
 
 Ways to create a balanced lane:
 
 - Use the default `AI_PR_REVIEW_MODE=balanced` behavior.
-- Keep the model cheap but tighten `.pr_agent.toml` instructions.
+- Keep automatic overview and suggestions on the cheaper model.
 - Run `/review` manually with a mid-tier model.
-- Increase suggestion quality thresholds so the bot comments less often but more carefully.
+- Increase suggestion quality thresholds if the bot comments too often.
 
 Example model patterns:
 
@@ -136,6 +139,27 @@ Provider names differ, but the pattern is usually similar:
 | Flash, mini, lite, fast | Frequent automatic runs | Cheaper and faster, usually less deep |
 | Balanced, sonnet-style, mid-tier | More serious everyday review | Better judgment, still cost-aware |
 | Pro, large, opus-style, reasoning | Manual deeper review | More capable, usually slower and more expensive |
+
+## Quality Versus Cost
+
+The best review model is not a fixed answer. Strong frontier models often produce better semantic
+PR overviews, broader reasoning, and more useful changed-file descriptions. They can also be
+expensive enough that running them automatically on every commit is the wrong default.
+
+Cheaper and open models can still be very useful. They may catch real bugs, missing tests, and
+obvious edge cases at a price that makes frequent review practical. They may also miss subtler
+issues or write more generic summaries. That is the tradeoff this template makes visible instead
+of hiding it behind one vendor.
+
+A practical strategy is:
+
+1. Use a cheap model for automatic first-pass overview and suggestions.
+2. Run a stronger manual `/review` or `/ask` pass on risky PRs.
+3. Try models on your own repository before treating any benchmark as final.
+4. Revisit model choices occasionally because model rankings, prices, and provider support change quickly.
+
+Benchmarks can help you choose what to test first, but they are not universal truth. Your codebase,
+PR size, language, framework, and risk tolerance matter more than a static leaderboard.
 
 ## What You Can Tune
 

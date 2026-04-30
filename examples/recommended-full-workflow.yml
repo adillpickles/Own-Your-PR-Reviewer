@@ -20,7 +20,11 @@ jobs:
         github.event.sender.type != 'Bot' &&
         (
           (github.event_name == 'pull_request' && github.event.pull_request.draft == false) ||
-          (github.event_name == 'issue_comment' && github.event.issue.pull_request)
+          (
+            github.event_name == 'issue_comment' &&
+            github.event.issue.pull_request &&
+            startsWith(github.event.comment.body, '/')
+          )
         )
       }}
     runs-on: ubuntu-latest
@@ -37,6 +41,7 @@ jobs:
       # Optional repository variables:
       #   AI_PR_REVIEW_ENABLED=false pauses automatic and manual review.
       #   AI_PR_REVIEW_MODE=light|balanced|deep tunes review intensity.
+      # Slash-command comments must start with / to run the manual step.
       # Defaults when unset: enabled, balanced.
 
       # Default provider: DeepSeek through LiteLLM.
@@ -88,7 +93,7 @@ jobs:
           github_action_config.pr_actions: '["opened", "reopened", "ready_for_review", "synchronize"]'
 
       - name: Manual slash commands
-        if: ${{ github.event_name == 'issue_comment' && github.event.issue.pull_request }}
+        if: ${{ github.event_name == 'issue_comment' && github.event.issue.pull_request && startsWith(github.event.comment.body, '/') }}
         # Pinned for stability. Update intentionally after testing.
         uses: Codium-ai/pr-agent@0e37fc84fcc8207561e64eef8f7f634fb57e8447
         env:

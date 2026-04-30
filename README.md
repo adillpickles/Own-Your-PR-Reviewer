@@ -1,5 +1,7 @@
 # Own Your PR Reviewer
 
+**A controllable, provider-flexible AI pull request reviewer for GitHub Actions.**
+
 A self-controlled AI pull request review workflow for GitHub Actions, built with PR-Agent and LiteLLM.
 
 It gives you the useful parts of a Copilot-style PR review loop: a PR overview, reviewed-file context, inline code suggestions, and a second-reviewer feeling while you are building. The difference is that you own the setup. Bring your own API key, pick your own provider, choose the model, choose the cost level, and decide when the bot should run.
@@ -30,7 +32,7 @@ The default setup uses DeepSeek because it is very inexpensive and works well as
 - Adds a lightweight PR overview when a PR is opened, reopened, or marked ready for review.
 - Adds automatic inline-style code suggestions on PR updates.
 - Gives reviewers changed-file context instead of only a generic summary.
-- Supports manual slash commands like `/review`, `/improve`, `/describe`, and `/ask`.
+- Supports manual slash commands like `/review`, `/improve`, `/describe`, and `/ask` when the PR comment starts with `/`.
 - Uses a cheap automatic model for normal iteration.
 - Lets manual commands use a stronger model when the PR deserves deeper attention.
 - Can be paused with a repository variable when you do not want AI review running.
@@ -131,6 +133,12 @@ You can tune:
 
 See [docs/model-strategy.md](docs/model-strategy.md).
 
+Model quality and cost move fast. Top-tier GPT, Claude, Gemini, and similar models may produce
+better semantic summaries and broader reasoning, but they can cost much more per PR. Cheaper models
+can still catch real issues and are often good enough for a frequent first pass. The best setup is
+usually to test models on your own PRs, keep automatic review cheap, and save stronger models for
+manual passes when the change is risky.
+
 ## Provider Flexibility
 
 This project is provider-flexible because PR-Agent can call models through LiteLLM.
@@ -176,6 +184,11 @@ Examples:
 ```text
 /ask What edge cases should I test before merging this?
 ```
+
+The workflow only wakes up for PR comments that begin with `/`, so normal review discussion should
+not spend AI credits. Automatic runs skip draft PRs. Manual slash commands are evaluated from
+`issue_comment` events, which do not include the full draft-state check in the template job
+condition, so avoid using slash commands on draft PRs unless you intentionally want a review pass.
 
 ## Examples
 

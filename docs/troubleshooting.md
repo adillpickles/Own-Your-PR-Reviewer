@@ -20,6 +20,8 @@ Check:
 - Whether the secret names in the workflow match the repository secrets.
 - Whether the provider API key env mapping matches PR-Agent and LiteLLM docs.
 - Whether the model strings are valid for the configured provider.
+- Whether the manual slash command comment starts with /.
+- Whether automatic and manual steps point at the intended cheap or strong model.
 - Whether the failure is provider auth, LiteLLM model lookup, token limit, permissions, or PR-Agent behavior.
 - Whether the workflow permissions include contents: read, issues: write, and pull-requests: write.
 - Whether manual slash commands are being skipped because the job condition is false.
@@ -47,6 +49,60 @@ Check:
 - The PR is not a draft.
 - The event is one of `opened`, `reopened`, `ready_for_review`, or `synchronize`.
 - The workflow was merged into the branch GitHub uses for Actions.
+- For slash commands, the comment starts with `/` and is on a pull request, not a plain issue.
+
+## Slash Commands Do Not Respond
+
+Check:
+
+- The comment starts with `/review`, `/improve`, `/describe`, or `/ask`.
+- The workflow has an `issue_comment` trigger.
+- The job condition includes `github.event.issue.pull_request`.
+- `AI_PR_REVIEW_ENABLED` is not `false`.
+- The sender is not a bot account.
+- The workflow file exists on the repository's default branch.
+- The PR-Agent logs show the command was parsed.
+- The repository permissions allow `issues: write` and `pull-requests: write`.
+
+Normal comments that do not begin with `/` are intentionally ignored to avoid spending credits on
+ordinary review discussion.
+
+## Manual Commands Use The Wrong Model
+
+Check:
+
+- `AI_PR_REVIEW_MODE` is unset, `light`, `balanced`, or `deep`.
+- The value is lowercase. `Deep` is not the same as `deep`.
+- The manual slash-command step overrides `config.model`.
+- `config.fallback_models` is aligned with the manual model.
+- Provider credentials exist for every provider referenced by the manual model and fallbacks.
+
+In the recommended workflow, `light` uses the cheap model for manual commands. `balanced`, unset,
+and `deep` use the stronger manual model.
+
+## The Workflow Was Accidentally Disabled
+
+Check whether this repository variable exists:
+
+```text
+AI_PR_REVIEW_ENABLED=false
+```
+
+If it is set to `false`, the whole job is skipped, including manual slash commands. Delete the
+variable or set it to `true` to resume.
+
+## Mode Looks Wrong
+
+Use lowercase values only:
+
+```text
+AI_PR_REVIEW_MODE=light
+AI_PR_REVIEW_MODE=balanced
+AI_PR_REVIEW_MODE=deep
+```
+
+If the value is missing or unknown, the workflow behaves close to balanced because it only branches
+on `light` and `deep`.
 
 ## Authentication Fails
 
@@ -88,6 +144,7 @@ Try:
 - Asking a targeted `/ask` question.
 - Adding project-specific review guidance to `.pr_agent.toml`.
 - Keeping PRs smaller so the model has clearer context.
+- Trying a stronger provider or model on one representative PR before changing the default.
 
 ## The Action Costs Too Much
 
@@ -111,3 +168,4 @@ Try:
 - Asking focused `/ask` questions.
 - Using a stronger long-context model manually.
 - Increasing token settings only after checking provider cost and limits.
+- Checking logs for clipping, chunking, context-length, or provider token-limit errors.
